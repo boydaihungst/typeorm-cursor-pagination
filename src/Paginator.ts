@@ -1,3 +1,4 @@
+/* eslint-disable no-param-reassign */
 import {
   Brackets,
   ObjectType,
@@ -6,13 +7,7 @@ import {
   WhereExpression,
 } from 'typeorm';
 
-import {
-  atob,
-  btoa,
-  encodeByType,
-  decodeByType,
-  pascalToUnderscore,
-} from './utils';
+import { atob, btoa, encodeByType, decodeByType } from './utils';
 
 export type Order = 'ASC' | 'DESC';
 
@@ -41,19 +36,26 @@ export default class Paginator<Entity> {
 
   private nextBeforeCursor: string | null = null;
 
-  private alias: string = pascalToUnderscore(this.entity.name);
-
   private limit = 100;
 
   private order: Order = 'DESC';
 
   public constructor(
-    private entity: ObjectType<Entity>,
-    private paginationKeys: Extract<keyof Entity, string>[],
-  ) { }
-
-  public setAlias(alias: string): void {
-    this.alias = alias;
+    private paginationKeys: {
+      entity: ObjectType<any>;
+      alias?: string;
+      keys: string[];
+      mappingProperty?: (returnEntity: Entity) => any;
+    }[],
+  ) {
+    paginationKeys.forEach((x) => {
+      if (!x.alias) {
+        x.alias = x.entity.name.toLowerCase();
+      }
+      if (!x.mappingProperty || typeof x.mappingProperty !== 'function') {
+        x.mappingProperty = (returnEntity: any) => returnEntity;
+      }
+    });
   }
 
   public setAfterCursor(cursor: string): void {
@@ -72,7 +74,9 @@ export default class Paginator<Entity> {
     this.order = order;
   }
 
-  public async paginate(builder: SelectQueryBuilder<Entity>): Promise<PagingResult<Entity>> {
+  public async paginate(
+    builder: SelectQueryBuilder<Entity>,
+  ): Promise<PagingResult<Entity>> {
     const entities = await this.appendPagingQuery(builder).getMany();
     const hasMore = entities.length > this.limit;
 
@@ -106,7 +110,9 @@ export default class Paginator<Entity> {
     };
   }
 
-  private appendPagingQuery(builder: SelectQueryBuilder<Entity>): SelectQueryBuilder<Entity> {
+  private appendPagingQuery(
+    builder: SelectQueryBuilder<Entity>,
+  ): SelectQueryBuilder<Entity> {
     const cursors: CursorParam = {};
     const { escape } = builder.connection.driver;
 
@@ -117,7 +123,9 @@ export default class Paginator<Entity> {
     }
 
     if (Object.keys(cursors).length > 0) {
-      builder.andWhere(new Brackets((where) => this.buildCursorQuery(where, cursors, escape)));
+      builder.andWhere(
+        new Brackets((where) => this.buildCursorQuery(where, cursors, escape)),
+      );
     }
 
     builder.take(this.limit + 1);
@@ -126,14 +134,28 @@ export default class Paginator<Entity> {
     return builder;
   }
 
-  private buildCursorQuery(where: WhereExpression, cursors: CursorParam, escape: EscapeFn): void {
+  private buildCursorQuery(
+    where: WhereExpression,
+    cursors: CursorParam,
+    escape: EscapeFn,
+  ): void {
     const operator = this.getOperator();
     const params: CursorParam = {};
     let query = '';
-    this.paginationKeys.forEach((key) => {
-      params[key] = cursors[key];
-      where.orWhere(`${query}${escape(this.alias)}.${escape(key)} ${operator} :${key}`, params);
-      query = `${query}${escape(this.alias)}.${escape(key)} = :${key} AND `;
+    this.paginationKeys.forEach((obj) => {
+      obj.keys.forEach((key) => {
+        const param = `${obj.alias}_${key}`;
+        params[param] = cursors[param];
+        where.orWhere(
+          `${query}${escape(obj.alias as any)}.${escape(
+            key,
+          )} ${operator} :${param}`,
+          params,
+        );
+        query = `${query}${escape(obj.alias as any)}.${escape(
+          key,
+        )} = :${param} AND `;
+      });
     });
   }
 
@@ -157,8 +179,12 @@ export default class Paginator<Entity> {
     }
 
     const orderByCondition: OrderByCondition = {};
-    this.paginationKeys.forEach((key) => {
-      orderByCondition[`${this.alias}.${key}`] = order;
+    this.paginationKeys.forEach((obj) => {
+      obj.keys.forEach((key) => {
+        orderByCondition[
+          `${escape(obj.alias as any)}.${escape(key as any)}`
+        ] = order;
+      });
     });
 
     return orderByCondition;
@@ -172,37 +198,52 @@ export default class Paginator<Entity> {
     return this.beforeCursor !== null;
   }
 
-  private encode(entity: Entity): string {
-    const payload = this.paginationKeys.map((key) => {
-      const type = this.getEntityPropertyType(key);
-      const value = encodeByType(type, entity[key]);
-      return `${key}:${value}`;
-    }).join(',');
+  private encode(entity: any): string {
+    const payload: string[] = [];
+    this.paginationKeys.forEach((obj) => {
+      obj.keys.forEach((key) => {
+        const param = `${obj.alias}_${key}`;
+        const type = this.getEntityPropertyType(key, obj.entity);
+        const entityValue =
+          // eslint-disable-next-line no-nested-ternary
+          typeof obj.mappingProperty === 'function'
+            ? obj.mappingProperty(entity)
+              ? obj.mappingProperty(entity)[key]
+              : null
+            : null;
+        const value = encodeByType(type, entityValue);
+        payload.push(`${param}:${type}:${value}`);
+      });
+    });
 
-    return btoa(payload);
+    return btoa(payload.join(','));
   }
 
   private decode(cursor: string): CursorParam {
     const cursors: CursorParam = {};
     const columns = atob(cursor).split(',');
     columns.forEach((column) => {
-      const [key, raw] = column.split(':');
-      const type = this.getEntityPropertyType(key);
+      const [param, type, raw] = column.split(':');
       const value = decodeByType(type, raw);
-      cursors[key] = value;
+      cursors[param] = value;
     });
 
     return cursors;
   }
 
-  private getEntityPropertyType(key: string): string {
-    return Reflect.getMetadata('design:type', this.entity.prototype, key).name.toLowerCase();
+  private getEntityPropertyType(
+    key: string,
+    entity: ObjectType<Entity>,
+  ): string {
+    return Reflect.getMetadata(
+      'design:type',
+      entity.prototype,
+      key,
+    ).name.toLowerCase();
   }
 
   private flipOrder(order: Order): Order {
-    return order === 'ASC'
-      ? 'DESC'
-      : 'ASC';
+    return order === 'ASC' ? 'DESC' : 'ASC';
   }
 
   private toPagingResult<Entity>(entities: Entity[]): PagingResult<Entity> {

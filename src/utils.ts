@@ -25,7 +25,10 @@ export function encodeByType(type: string, value: any): string | null {
   }
 }
 
-export function decodeByType(type: string, value: string): string | number | Date {
+export function decodeByType(
+  type: string,
+  value: string,
+): string | number | Date {
   switch (type) {
     case 'date': {
       const timestamp = parseInt(value, 10);
@@ -72,7 +75,10 @@ export function stringToNumber(value: string): number {
 }
 
 export function camelOrPascalToUnderscore(str: string): string {
-  return str.split(/(?=[A-Z])/).join('_').toLowerCase();
+  return str
+    .split(/(?=[A-Z])/)
+    .join('_')
+    .toLowerCase();
 }
 
 export function pascalToUnderscore(str: string): string {

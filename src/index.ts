@@ -11,24 +11,34 @@ export interface PagingQuery {
   order?: Order;
 }
 
-export interface PagniationOtions<Entity> {
-  entity: ObjectType<Entity>;
+export interface PaginationKey<ReturnEntity> {
+  entity: ObjectType<any>;
   alias?: string;
+  keys: string[];
+  mappingProperty?: (returnEntity: ReturnEntity) => any;
+}
+export interface PagniationOtions<Entity> {
+  returnEntity: ObjectType<Entity>;
   query?: PagingQuery;
-  paginationKeys?: Extract<keyof Entity, string>[];
+  paginationKeys?: PaginationKey<Entity>[];
 }
 
-export function buildPaginator<Entity>(options: PagniationOtions<Entity>): Paginator<Entity> {
+export function buildPaginator<Entity>(
+  options: PagniationOtions<Entity>,
+): Paginator<Entity> {
   const {
-    entity,
+    returnEntity,
     query = {},
-    alias = entity.name.toLowerCase(),
-    paginationKeys = ['id' as any],
+    paginationKeys = [
+      {
+        entity: options.returnEntity,
+        alias: returnEntity.name.toLowerCase(),
+        keys: ['id'],
+      },
+    ],
   } = options;
 
-  const paginator = new Paginator(entity, paginationKeys);
-
-  paginator.setAlias(alias);
+  const paginator = new Paginator<Entity>(paginationKeys);
 
   if (query.afterCursor) {
     paginator.setAfterCursor(query.afterCursor);

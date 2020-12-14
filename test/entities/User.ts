@@ -4,7 +4,10 @@ import {
   PrimaryGeneratedColumn,
   OneToMany,
   CreateDateColumn,
+  OneToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Address } from './Address';
 
 import { Photo } from './Photo';
 
@@ -24,16 +27,18 @@ export class User {
     type: 'timestamp',
     nullable: false,
   })
-  public timestamp!: Date
+  public timestamp!: Date;
 
-  @OneToMany(
-    () => Photo,
-    (photo) => photo.user,
-    {
-      cascade: true,
-    },
-  )
-  public photos!: Photo[]
+  @OneToMany(() => Photo, (photo) => photo.user, {
+    cascade: true,
+  })
+  public photos!: Photo[];
+
+  @OneToOne(() => Address, (address) => address.user, {
+    cascade: true,
+  })
+  @JoinColumn()
+  public address!: Address;
 
   @CreateDateColumn()
   createdAt!: Date;

@@ -7,12 +7,13 @@ export async function prepareData(): Promise<void> {
     timestamp: new Date(),
     photos: [
       {
-        link: `http://photo.com/${i}`,
+        link: `http://photo.com/${i + 1}`,
       },
     ],
+    address: {
+      country: `country${i + 1}`,
+    },
   }));
 
-  await getConnection()
-    .getRepository(User)
-    .save(data);
+  await getConnection().getRepository(User).save(data);
 }

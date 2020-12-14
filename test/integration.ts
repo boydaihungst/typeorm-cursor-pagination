@@ -6,54 +6,81 @@ import { prepareData } from './utils/prepareData';
 import { User } from './entities/User';
 import { Photo } from './entities/Photo';
 import { buildPaginator } from '../src/index';
+import { Address } from './entities/Address';
 
 describe('TypeORM cursor-based pagination test', () => {
   before(async () => {
     await createConnection({
-      type: 'postgres',
+      type: 'mysql',
       host: 'localhost',
-      port: 5432,
-      username: 'test',
-      password: 'test',
-      database: 'test',
+      port: 3306,
+      username: 'archivedfile',
+      password: 'Anhhoang123',
+      database: 'archivedfile',
       synchronize: true,
-      entities: [User, Photo],
+      entities: [User, Photo, Address],
       logging: true,
     });
-
     await prepareData();
   });
 
   it('should paginate correctly with before and after cursor', async () => {
-    const queryBuilder = createQueryBuilder().leftJoinAndSelect('user.photos', 'photo');
+    const queryBuilder = createQueryBuilder().leftJoinAndSelect(
+      'user.photos',
+      'photo',
+    );
     const firstPagePaginator = buildPaginator({
-      entity: User,
-      paginationKeys: ['id', 'name', 'timestamp'],
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: User,
+          keys: ['id', 'name', 'timestamp'],
+          alias: 'user',
+        },
+      ],
       query: {
         limit: 1,
       },
     });
-    const firstPageResult = await firstPagePaginator.paginate(queryBuilder.clone());
+    const firstPageResult = await firstPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
 
     const nextPagePaginator = buildPaginator({
-      entity: User,
-      paginationKeys: ['id', 'name', 'timestamp'],
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: User,
+          keys: ['id', 'name', 'timestamp'],
+          alias: 'user',
+        },
+      ],
       query: {
         limit: 1,
         afterCursor: firstPageResult.cursor.afterCursor as string,
       },
     });
-    const nextPageResult = await nextPagePaginator.paginate(queryBuilder.clone());
+    const nextPageResult = await nextPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
 
     const prevPagePaginator = buildPaginator({
-      entity: User,
-      paginationKeys: ['id', 'name', 'timestamp'],
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: User,
+          keys: ['id', 'name', 'timestamp'],
+          alias: 'user',
+        },
+      ],
       query: {
         limit: 1,
         beforeCursor: nextPageResult.cursor.beforeCursor as string,
       },
     });
-    const prevPageResult = await prevPagePaginator.paginate(queryBuilder.clone());
+    const prevPageResult = await prevPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
 
     expect(firstPageResult.cursor.beforeCursor).to.eq(null);
     expect(firstPageResult.cursor.afterCursor).to.not.eq(null);
@@ -68,17 +95,165 @@ describe('TypeORM cursor-based pagination test', () => {
     expect(prevPageResult.data[0].id).to.eq(10);
   });
 
+  it('should correctly paginate entities with one-to-one relation pagination keys', async () => {
+    const queryBuilder = createQueryBuilder().leftJoinAndSelect(
+      'user.address',
+      'address',
+    );
+    const paginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Address,
+          keys: ['id', 'country'],
+          mappingProperty: (returnEntity: User) => returnEntity.address,
+        },
+      ],
+      query: {
+        limit: 1,
+      },
+    });
+    const firstPageResult = await paginator.paginate(queryBuilder);
+
+    const nextPagePaginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Address,
+          keys: ['id', 'country'],
+          mappingProperty: (returnEntity: User) => returnEntity.address,
+        },
+      ],
+      query: {
+        limit: 1,
+        afterCursor: firstPageResult.cursor.afterCursor as string,
+      },
+    });
+    const nextPageResult = await nextPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
+
+    const prevPagePaginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Address,
+          keys: ['id', 'country'],
+          mappingProperty: (returnEntity: User) => returnEntity.address,
+        },
+      ],
+      query: {
+        limit: 1,
+        beforeCursor: nextPageResult.cursor.beforeCursor as string,
+      },
+    });
+    const prevPageResult = await prevPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
+    expect(firstPageResult.cursor.beforeCursor).to.eq(null);
+    expect(firstPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(firstPageResult.data[0].address.id).to.eq(10);
+    expect(firstPageResult.data[0].address.country).to.eq(`country${10}`);
+
+    expect(nextPageResult.cursor.beforeCursor).to.not.eq(null);
+    expect(nextPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(nextPageResult.data[0].address.id).to.eq(9);
+    expect(nextPageResult.data[0].address.country).to.eq(`country${9}`);
+
+    expect(prevPageResult.cursor.beforeCursor).to.eq(null);
+    expect(prevPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(prevPageResult.data[0].address.id).to.eq(10);
+    expect(prevPageResult.data[0].address.country).to.eq(`country${10}`);
+  });
+
+  it('should correctly paginate entities with one-to-many relation pagination keys', async () => {
+    const queryBuilder = createQueryBuilder().leftJoinAndSelect(
+      'user.photos',
+      'photo',
+    );
+    const paginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Photo,
+          keys: ['id', 'link'],
+          mappingProperty: (returnEntity: User) => returnEntity.photos[0],
+        },
+      ],
+      query: {
+        limit: 1,
+      },
+    });
+    const firstPageResult = await paginator.paginate(queryBuilder);
+
+    const nextPagePaginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Photo,
+          keys: ['id', 'link'],
+          mappingProperty: (returnEntity: User) => returnEntity.photos[0],
+        },
+      ],
+      query: {
+        limit: 1,
+        afterCursor: firstPageResult.cursor.afterCursor as string,
+      },
+    });
+    const nextPageResult = await nextPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
+
+    const prevPagePaginator = buildPaginator({
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: Photo,
+          keys: ['id', 'link'],
+          mappingProperty: (returnEntity: User) => returnEntity.photos[0],
+        },
+      ],
+      query: {
+        limit: 1,
+        beforeCursor: nextPageResult.cursor.beforeCursor as string,
+      },
+    });
+    const prevPageResult = await prevPagePaginator.paginate(
+      queryBuilder.clone(),
+    );
+    expect(firstPageResult.cursor.beforeCursor).to.eq(null);
+    expect(firstPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(firstPageResult.data[0].photos[0].id).to.eq(10);
+    expect(firstPageResult.data[0].photos[0].link).to.eq(
+      `http://photo.com/${10}`,
+    );
+
+    expect(nextPageResult.cursor.beforeCursor).to.not.eq(null);
+    expect(nextPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(nextPageResult.data[0].photos[0].id).to.eq(9);
+    expect(nextPageResult.data[0].photos[0].link).to.eq(
+      `http://photo.com/${9}`,
+    );
+
+    expect(prevPageResult.cursor.beforeCursor).to.eq(null);
+    expect(prevPageResult.cursor.afterCursor).to.not.eq(null);
+    expect(prevPageResult.data[0].photos[0].id).to.eq(10);
+    expect(prevPageResult.data[0].photos[0].link).to.eq(
+      `http://photo.com/${10}`,
+    );
+  });
+
   it('should return entities with given order', async () => {
     const queryBuilder = createQueryBuilder();
     const ascPaginator = buildPaginator({
-      entity: User,
+      returnEntity: User,
       query: {
         limit: 1,
         order: 'ASC',
       },
     });
     const descPaginator = buildPaginator({
-      entity: User,
+      returnEntity: User,
       query: {
         limit: 1,
         order: 'DESC',
@@ -95,7 +270,7 @@ describe('TypeORM cursor-based pagination test', () => {
   it('should return entities with given limit', async () => {
     const queryBuilder = createQueryBuilder();
     const paginator = buildPaginator({
-      entity: User,
+      returnEntity: User,
       query: {
         limit: 10,
       },
@@ -107,9 +282,11 @@ describe('TypeORM cursor-based pagination test', () => {
   });
 
   it('should return empty array and null cursor if no data', async () => {
-    const queryBuilder = createQueryBuilder().where('user.id > :id', { id: 10 });
+    const queryBuilder = createQueryBuilder().where('user.id > :id', {
+      id: 10,
+    });
     const paginator = buildPaginator({
-      entity: User,
+      returnEntity: User,
     });
     const result = await paginator.paginate(queryBuilder);
 
@@ -121,8 +298,13 @@ describe('TypeORM cursor-based pagination test', () => {
   it('should correctly paginate entities with camel-cased pagination keys', async () => {
     const queryBuilder = createQueryBuilder();
     const paginator = buildPaginator({
-      entity: User,
-      paginationKeys: ['createdAt', 'id'],
+      returnEntity: User,
+      paginationKeys: [
+        {
+          entity: User,
+          keys: ['id', 'createdAt'],
+        },
+      ],
     });
     const result = await paginator.paginate(queryBuilder);
 
@@ -130,7 +312,6 @@ describe('TypeORM cursor-based pagination test', () => {
   });
 
   after(async () => {
-    await getConnection().query('TRUNCATE TABLE users RESTART IDENTITY CASCADE;');
     await getConnection().close();
   });
 });
