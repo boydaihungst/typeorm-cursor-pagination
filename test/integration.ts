@@ -11,12 +11,12 @@ import { Address } from './entities/Address';
 describe('TypeORM cursor-based pagination test', () => {
   before(async () => {
     await createConnection({
-      type: 'mysql',
+      type: 'postgres',
       host: 'localhost',
-      port: 3306,
-      username: 'archivedfile',
-      password: 'Anhhoang123',
-      database: 'archivedfile',
+      port: 5432,
+      username: 'test',
+      password: 'test',
+      database: 'test',
       synchronize: true,
       entities: [User, Photo, Address],
       logging: true,
