@@ -24,6 +24,7 @@ export interface Cursor {
 
 export interface PagingResult<Entity> {
   data: Entity[];
+  raw: any[];
   cursor: Cursor;
 }
 
@@ -77,30 +78,33 @@ export default class Paginator<Entity> {
   public async paginate(
     builder: SelectQueryBuilder<Entity>,
   ): Promise<PagingResult<Entity>> {
-    const entities = await this.appendPagingQuery(builder).getMany();
-    const hasMore = entities.length > this.limit;
+    const { entities, raw } = await this.appendPagingQuery(
+      builder,
+    ).getRawAndEntities();
+    const hasMore = raw.length > this.limit;
 
     if (hasMore) {
-      entities.splice(entities.length - 1, 1);
+      raw.splice(raw.length - 1, 1);
     }
 
-    if (entities.length === 0) {
-      return this.toPagingResult(entities);
+    if (raw.length === 0) {
+      return this.toPagingResult(entities, raw);
     }
 
     if (!this.hasAfterCursor() && this.hasBeforeCursor()) {
+      raw.reverse();
       entities.reverse();
     }
 
     if (this.hasBeforeCursor() || hasMore) {
-      this.nextAfterCursor = this.encode(entities[entities.length - 1]);
+      this.nextAfterCursor = this.encode(raw[raw.length - 1]);
     }
 
     if (this.hasAfterCursor() || (hasMore && this.hasBeforeCursor())) {
-      this.nextBeforeCursor = this.encode(entities[0]);
+      this.nextBeforeCursor = this.encode(raw[0]);
     }
 
-    return this.toPagingResult(entities);
+    return this.toPagingResult(entities, raw);
   }
 
   private getCursor(): Cursor {
@@ -246,9 +250,13 @@ export default class Paginator<Entity> {
     return order === 'ASC' ? 'DESC' : 'ASC';
   }
 
-  private toPagingResult<Entity>(entities: Entity[]): PagingResult<Entity> {
+  private toPagingResult<Entity>(
+    entities: Entity[],
+    raw: any[],
+  ): PagingResult<Entity> {
     return {
       data: entities,
+      raw,
       cursor: this.getCursor(),
     };
   }

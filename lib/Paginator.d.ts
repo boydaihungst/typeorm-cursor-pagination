@@ -7,6 +7,7 @@ export interface Cursor {
 }
 export interface PagingResult<Entity> {
     data: Entity[];
+    raw: any[];
     cursor: Cursor;
 }
 export default class Paginator<Entity> {
