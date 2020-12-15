@@ -24,7 +24,7 @@ export interface Cursor {
 
 export interface PagingResult<Entity> {
   data: Entity[];
-  raw: any[];
+  total: number;
   cursor: Cursor;
 }
 
@@ -78,33 +78,33 @@ export default class Paginator<Entity> {
   public async paginate(
     builder: SelectQueryBuilder<Entity>,
   ): Promise<PagingResult<Entity>> {
-    const { entities, raw } = await this.appendPagingQuery(
+    const [entities, total] = await this.appendPagingQuery(
       builder,
-    ).getRawAndEntities();
-    const hasMore = raw.length > this.limit;
+    ).getManyAndCount();
+    const hasMore = entities.length > this.limit;
 
     if (hasMore) {
-      raw.splice(raw.length - 1, 1);
+      entities.splice(entities.length - 1, 1);
     }
 
-    if (raw.length === 0) {
-      return this.toPagingResult(entities, raw);
+    if (entities.length === 0) {
+      return this.toPagingResult(entities, total);
     }
 
     if (!this.hasAfterCursor() && this.hasBeforeCursor()) {
-      raw.reverse();
+      entities.reverse();
       entities.reverse();
     }
 
     if (this.hasBeforeCursor() || hasMore) {
-      this.nextAfterCursor = this.encode(raw[raw.length - 1]);
+      this.nextAfterCursor = this.encode(entities[entities.length - 1]);
     }
 
     if (this.hasAfterCursor() || (hasMore && this.hasBeforeCursor())) {
-      this.nextBeforeCursor = this.encode(raw[0]);
+      this.nextBeforeCursor = this.encode(entities[0]);
     }
 
-    return this.toPagingResult(entities, raw);
+    return this.toPagingResult(entities, total);
   }
 
   private getCursor(): Cursor {
@@ -252,11 +252,11 @@ export default class Paginator<Entity> {
 
   private toPagingResult<Entity>(
     entities: Entity[],
-    raw: any[],
+    total: number,
   ): PagingResult<Entity> {
     return {
       data: entities,
-      raw,
+      total,
       cursor: this.getCursor(),
     };
   }
